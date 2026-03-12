@@ -14,6 +14,7 @@
 - Portfolio progress dashboard with module and phase completion rollups
 - Progress snapshot export for handoff or status reporting
 - Quick-start guide with a reset-safe onboarding panel for first-time or returning operators
+- AI copilot chat panel with provider switching (`Gemini`, `OpenAI`, local mock) and route-aware guidance
 - Route-level detail for module, feature, screen, route, purpose, components, primary actions, empty state, error state, permissions, APIs, DB objects, and acceptance criteria
 - Hash-based route selection so each inventory row is directly addressable in the browser
 - Responsive inventory, blueprint, state, contract, and acceptance views
@@ -50,6 +51,21 @@ The smoke script verifies:
 - checklist state survives a reload
 - progress export includes persona and scope metadata
 - `Reset Workspace` returns the shell to the default admin view without clearing checklist progress
+
+## AI Chat Capability
+
+The workspace includes a route-aware chat panel intended for AI rollout planning.
+
+- Provider options: `Gemini`, `OpenAI`, `Mock Copilot`
+- API keys are optional and stored in browser localStorage for this prototype
+- If a key is missing, the chat returns a local mock response based on the selected route
+
+Live provider endpoints used by the browser client:
+
+- OpenAI: `https://api.openai.com/v1/responses`
+- Gemini: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`
+
+Use this for planning and handoff guidance; avoid production API keys in shared browsers.
 
 ## Data source
 

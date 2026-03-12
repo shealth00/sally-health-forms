@@ -415,6 +415,106 @@ h4 {
   line-height: 1.55;
 }
 
+.ai-chat-card {
+  display: grid;
+  gap: 1rem;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--module-accent, var(--accent)) 26%, var(--border));
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--module-accent, var(--accent)) 11%, transparent), transparent 42%),
+    var(--surface);
+}
+
+.chat-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 0.85rem;
+}
+
+.chat-status {
+  padding: 0.8rem 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(28, 38, 48, 0.08);
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--muted);
+}
+
+.chat-transcript {
+  display: grid;
+  gap: 0.7rem;
+  max-height: 340px;
+  padding: 0.9rem;
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(28, 38, 48, 0.08);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.chat-empty {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border-strong);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.chat-message {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(28, 38, 48, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.chat-message.is-user {
+  border-color: color-mix(in srgb, var(--module-accent, var(--accent)) 26%, var(--border));
+  background: color-mix(in srgb, var(--module-accent, var(--accent)) 10%, white);
+}
+
+.chat-message-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.chat-message p {
+  color: var(--ink);
+  line-height: 1.52;
+}
+
+.chat-prompt {
+  min-height: 120px;
+  resize: vertical;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--ink);
+}
+
+.chat-prompt:focus {
+  outline: 2px solid color-mix(in srgb, var(--module-accent, var(--accent)) 38%, transparent);
+  outline-offset: 2px;
+}
+
+.chat-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.chat-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .card,
 .catalog-card,
 .module-board-card {
@@ -623,6 +723,13 @@ h4 {
   background: linear-gradient(135deg, var(--module-accent, var(--accent)), color-mix(in srgb, var(--module-accent, var(--accent)) 56%, #f1c65f));
   color: #17202b;
   box-shadow: 0 18px 38px color-mix(in srgb, var(--module-accent, var(--accent)) 22%, transparent);
+}
+
+.primary-button:disabled,
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
 }
 
 .small-button {
@@ -1398,6 +1505,7 @@ h4 {
   .workspace-grid,
   .contract-grid,
   .dependency-grid,
+  .chat-controls,
   .guide-summary,
   .guide-grid,
   .portfolio-summary,
@@ -1474,15 +1582,26 @@ h4 {
   }
 
   .topbar-actions,
-  .card-actions {
+  .card-actions,
+  .chat-actions {
     width: 100%;
   }
 
   .topbar-actions > button,
   .card-actions > button,
+  .chat-actions > button,
   .details-toggle {
     width: 100%;
     justify-content: center;
+  }
+
+  .chat-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .chat-hint {
+    text-align: center;
   }
 
   .guide-step {

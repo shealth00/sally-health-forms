@@ -163,6 +163,42 @@
         </article>
       </section>
 
+      <section id="ai-chat-card" class="card ai-chat-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">AI Copilot</p>
+            <h3>Chat Capability</h3>
+          </div>
+          <div class="card-actions">
+            <button id="chat-clear" class="ghost-button small-button" type="button">Clear Chat</button>
+          </div>
+        </div>
+        <div class="chat-controls">
+          <label class="control-field">
+            <span>Provider</span>
+            <select id="chat-provider"></select>
+          </label>
+          <label class="control-field">
+            <span>Provider API Key (optional)</span>
+            <input id="chat-api-key" type="password" placeholder="Required for live provider responses">
+          </label>
+        </div>
+        <p id="chat-status" class="chat-status"></p>
+        <div id="chat-transcript" class="chat-transcript"></div>
+        <label class="control-field">
+          <span>Prompt</span>
+          <textarea
+            id="chat-prompt"
+            class="chat-prompt"
+            placeholder="Ask for route guidance, acceptance checks, API contracts, or rollout sequencing."
+          ></textarea>
+        </label>
+        <div class="chat-actions">
+          <span class="chat-hint">Use Ctrl + Enter to send</span>
+          <button id="chat-send" class="primary-button" type="button">Send</button>
+        </div>
+      </section>
+
       <section class="workspace-grid">
         <aside class="card catalog">
           <div class="card-heading">

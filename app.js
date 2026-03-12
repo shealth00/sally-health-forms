@@ -49,6 +49,14 @@ const PERSONA_LABELS = {
   [ALL_PERSONA]: "All Screens"
 };
 
+const AI_CHAT_PROVIDERS = [
+  { id: "gemini", label: "Gemini", model: "gemini-2.0-flash", supportsLive: true },
+  { id: "openai", label: "OpenAI", model: "gpt-4.1-mini", supportsLive: true },
+  { id: "mock", label: "Mock Copilot", model: "local-simulated", supportsLive: false }
+];
+const DEFAULT_CHAT_PROVIDER = AI_CHAT_PROVIDERS[0].id;
+const AI_CHAT_MAX_HISTORY = 40;
+
 const CHECKLIST_DEFINITIONS = [
   {
     key: "ui",
@@ -118,6 +126,14 @@ const elements = {
   screenMetrics: document.querySelector("#screen-metrics"),
   metaPills: document.querySelector("#meta-pills"),
   primaryActions: document.querySelector("#primary-actions"),
+  chatCard: document.querySelector("#ai-chat-card"),
+  chatProvider: document.querySelector("#chat-provider"),
+  chatApiKey: document.querySelector("#chat-api-key"),
+  chatStatus: document.querySelector("#chat-status"),
+  chatTranscript: document.querySelector("#chat-transcript"),
+  chatPrompt: document.querySelector("#chat-prompt"),
+  chatSend: document.querySelector("#chat-send"),
+  chatClear: document.querySelector("#chat-clear"),
   coverageGrid: document.querySelector("#coverage-grid"),
   catalogCount: document.querySelector("#catalog-count"),
   routeCatalog: document.querySelector("#route-catalog"),
@@ -196,6 +212,42 @@ function bindEvents() {
     state.sort = event.target.value;
     persistState();
     render();
+  });
+
+  elements.chatProvider.addEventListener("change", (event) => {
+    state.chatProvider = event.target.value;
+    persistState();
+    render();
+  });
+
+  elements.chatApiKey.addEventListener("input", (event) => {
+    state.chatApiKeys[state.chatProvider] = event.target.value.trim();
+    persistState();
+  });
+
+  elements.chatPrompt.addEventListener("input", (event) => {
+    state.chatDraft = event.target.value;
+    persistState();
+  });
+
+  elements.chatPrompt.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void handleChatSend();
+    }
+  });
+
+  elements.chatSend.addEventListener("click", () => {
+    void handleChatSend();
+  });
+
+  elements.chatClear.addEventListener("click", () => {
+    const screen = getCurrentScreen();
+    if (!screen) return;
+    delete state.chatHistory[getChatThreadKey(screen)];
+    persistState();
+    render();
+    showToast("Chat history cleared for this route.");
   });
 
   elements.clearModule.addEventListener("click", () => {
@@ -348,6 +400,7 @@ function render() {
   renderModuleFilter(scopedScreens);
   renderJourney(selectedScreen, scopedScreens);
   renderHero(selectedScreen, scopedScreens, visibleScreens);
+  renderChat(selectedScreen);
   renderCoverageGrid(selectedScreen, scopedScreens, visibleScreens);
   renderCatalog(visibleScreens, selectedScreen, scopedScreens);
   renderBlueprint(selectedScreen);
@@ -595,6 +648,253 @@ function renderHero(selectedScreen, scopedScreens, visibleScreens) {
     <strong>${escapeHtml(selectedScreen.route)}</strong>
     <span class="sequence-chip">${escapeHtml(getPersonaLabel())}</span>
   `;
+}
+
+function renderChat(selectedScreen) {
+  const provider = getActiveChatProvider();
+  const providerOptions = AI_CHAT_PROVIDERS.map(
+    (item) => `<option value="${escapeAttribute(item.id)}">${escapeHtml(item.label)}</option>`
+  ).join("");
+  const messages = getChatMessages(selectedScreen);
+  const activeApiKey = state.chatApiKeys[provider.id] || "";
+  const aiContextLabel =
+    selectedScreen.module === "AI"
+      ? `${selectedScreen.feature} route context is active.`
+      : `Current route is in ${selectedScreen.module}; chat still uses this route context.`;
+
+  elements.chatProvider.innerHTML = providerOptions;
+  elements.chatProvider.value = provider.id;
+
+  if (elements.chatApiKey.value !== activeApiKey) {
+    elements.chatApiKey.value = activeApiKey;
+  }
+
+  if (elements.chatPrompt.value !== state.chatDraft) {
+    elements.chatPrompt.value = state.chatDraft;
+  }
+
+  if (state.chatPending) {
+    elements.chatStatus.textContent = `Working on a ${provider.label} response for ${selectedScreen.screen}...`;
+  } else if (provider.supportsLive && !activeApiKey) {
+    elements.chatStatus.textContent = `${provider.label} API key is missing. Messages will use local mock mode until a key is set.`;
+  } else {
+    elements.chatStatus.textContent = `${provider.label} is ready. ${aiContextLabel}`;
+  }
+
+  elements.chatSend.disabled = state.chatPending || !state.chatDraft.trim();
+
+  elements.chatTranscript.innerHTML = messages.length
+    ? messages
+        .map(
+          (message) => `
+            <article class="chat-message ${message.role === "user" ? "is-user" : "is-assistant"}">
+              <div class="chat-message-top">
+                <strong>${escapeHtml(message.role === "user" ? "You" : "Assistant")}</strong>
+                <span>${escapeHtml(message.providerLabel || provider.label)}</span>
+              </div>
+              <p>${formatChatContent(message.content)}</p>
+            </article>
+          `
+        )
+        .join("")
+    : `
+      <div class="chat-empty">
+        <p>No chat history for this route yet.</p>
+        <p>Ask for rollout sequencing, API wiring, acceptance checks, or test strategy for ${escapeHtml(selectedScreen.screen)}.</p>
+      </div>
+    `;
+}
+
+function getActiveChatProvider() {
+  return AI_CHAT_PROVIDERS.find((provider) => provider.id === state.chatProvider) || AI_CHAT_PROVIDERS[0];
+}
+
+function getChatThreadKey(screen) {
+  return screen.route;
+}
+
+function getChatMessages(screen) {
+  return state.chatHistory[getChatThreadKey(screen)] || [];
+}
+
+function addChatMessage(screen, message) {
+  const key = getChatThreadKey(screen);
+  const current = state.chatHistory[key] || [];
+  current.push({
+    role: message.role,
+    content: message.content,
+    provider: message.provider,
+    providerLabel: message.providerLabel,
+    createdAt: new Date().toISOString()
+  });
+  state.chatHistory[key] = current.slice(-AI_CHAT_MAX_HISTORY);
+}
+
+async function handleChatSend() {
+  if (state.chatPending) return;
+
+  const screen = getCurrentScreen();
+  if (!screen) return;
+
+  const prompt = state.chatDraft.trim();
+  if (!prompt) return;
+
+  const provider = getActiveChatProvider();
+  addChatMessage(screen, {
+    role: "user",
+    content: prompt,
+    provider: provider.id,
+    providerLabel: provider.label
+  });
+  state.chatDraft = "";
+  state.chatPending = true;
+  persistState();
+  render();
+
+  try {
+    const assistantReply = await requestChatReply(screen, prompt);
+    addChatMessage(screen, {
+      role: "assistant",
+      content: assistantReply,
+      provider: provider.id,
+      providerLabel: provider.label
+    });
+  } catch (error) {
+    addChatMessage(screen, {
+      role: "assistant",
+      content: buildMockChatReply(screen, prompt, provider, true),
+      provider: provider.id,
+      providerLabel: `${provider.label} (Fallback)`
+    });
+    showToast(`${provider.label} request failed. Returned mock response.`);
+  } finally {
+    state.chatPending = false;
+    persistState();
+    render();
+  }
+}
+
+async function requestChatReply(screen, prompt) {
+  const provider = getActiveChatProvider();
+  const apiKey = (state.chatApiKeys[provider.id] || "").trim();
+
+  if (provider.id === "openai" && apiKey) {
+    return requestOpenAIReply(screen, prompt, provider, apiKey);
+  }
+
+  if (provider.id === "gemini" && apiKey) {
+    return requestGeminiReply(screen, prompt, provider, apiKey);
+  }
+
+  return buildMockChatReply(screen, prompt, provider, provider.supportsLive && !apiKey);
+}
+
+async function requestOpenAIReply(screen, prompt, provider, apiKey) {
+  const payload = {
+    model: provider.model,
+    input: [
+      { role: "system", content: buildChatSystemPrompt(screen) },
+      { role: "user", content: prompt }
+    ]
+  };
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI request failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text =
+    data.output_text ||
+    data.output
+      ?.flatMap((entry) => entry.content || [])
+      .map((entry) => entry.text || "")
+      .join("\n")
+      .trim();
+
+  if (!text) {
+    throw new Error("OpenAI response was empty.");
+  }
+
+  return text;
+}
+
+async function requestGeminiReply(screen, prompt, provider, apiKey) {
+  const payload = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${buildChatSystemPrompt(screen)}\n\nUser request:\n${prompt}`
+          }
+        ]
+      }
+    ]
+  };
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${provider.model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini request failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n").trim();
+
+  if (!text) {
+    throw new Error("Gemini response was empty.");
+  }
+
+  return text;
+}
+
+function buildChatSystemPrompt(screen) {
+  return [
+    "You are assisting with a route rollout workspace.",
+    `Route: ${screen.route}`,
+    `Screen: ${screen.screen}`,
+    `Module: ${screen.module}`,
+    `Feature: ${screen.feature}`,
+    `Primary actions: ${screen.primaryActions.join(", ")}`,
+    `APIs: ${screen.apis.join(", ")}`,
+    `Acceptance criteria: ${screen.acceptanceCriteria.join("; ")}`,
+    "Keep responses concise, implementation-focused, and tied to this route."
+  ].join("\n");
+}
+
+function buildMockChatReply(screen, prompt, provider, missingKey = false) {
+  const access = screen.permissions.join(", ") || "No explicit access rule";
+  const dependencies = screen.apis.length ? screen.apis.slice(0, 3).join(", ") : "No API dependencies listed";
+  const intro = missingKey
+    ? `${provider.label} key is not configured, so this is a local mock response.`
+    : `Local mock response for ${provider.label}.`;
+
+  return [
+    intro,
+    `Prompt focus: ${prompt}`,
+    `Route context: ${screen.screen} (${screen.route})`,
+    `Access baseline: ${access}`,
+    `Top dependencies: ${dependencies}`,
+    `Next execution step: validate "${screen.acceptanceCriteria[0] || "core route behavior"}" before marking checklist completion.`
+  ].join("\n");
+}
+
+function formatChatContent(value) {
+  return escapeHtml(value).replaceAll("\n", "<br>");
 }
 
 function renderCoverageGrid(selectedScreen, scopedScreens, visibleScreens) {
@@ -1456,6 +1756,23 @@ function normalizeState() {
   }
 
   state.guideDismissed = Boolean(state.guideDismissed);
+  if (!state.chatHistory || typeof state.chatHistory !== "object") {
+    state.chatHistory = {};
+  }
+
+  if (!state.chatApiKeys || typeof state.chatApiKeys !== "object") {
+    state.chatApiKeys = {};
+  }
+
+  if (typeof state.chatDraft !== "string") {
+    state.chatDraft = "";
+  }
+
+  if (!AI_CHAT_PROVIDERS.some((provider) => provider.id === state.chatProvider)) {
+    state.chatProvider = DEFAULT_CHAT_PROVIDER;
+  }
+
+  state.chatPending = Boolean(state.chatPending);
 
   const scopedModules = getScopedModules();
   if (!scopedModules.includes(state.module) && state.module !== ALL_MODULES) {
@@ -1531,6 +1848,8 @@ function resetWorkspace() {
   state.query = "";
   state.sort = "index";
   state.selectedRoute = defaultAdminRoute;
+  state.chatDraft = "";
+  state.chatPending = false;
   persistState();
   updateHash(state.selectedRoute, true);
   render();
@@ -1594,7 +1913,12 @@ function loadState() {
       sort: saved?.sort ?? "index",
       selectedRoute: saved?.selectedRoute ?? defaultAdminRoute,
       checklistProgress: saved?.checklistProgress ?? {},
-      guideDismissed: saved?.guideDismissed ?? false
+      guideDismissed: saved?.guideDismissed ?? false,
+      chatProvider: saved?.chatProvider ?? DEFAULT_CHAT_PROVIDER,
+      chatDraft: saved?.chatDraft ?? "",
+      chatHistory: saved?.chatHistory ?? {},
+      chatApiKeys: saved?.chatApiKeys ?? {},
+      chatPending: false
     };
   } catch (error) {
     return {
@@ -1605,7 +1929,12 @@ function loadState() {
       sort: "index",
       selectedRoute: defaultAdminRoute,
       checklistProgress: {},
-      guideDismissed: false
+      guideDismissed: false,
+      chatProvider: DEFAULT_CHAT_PROVIDER,
+      chatDraft: "",
+      chatHistory: {},
+      chatApiKeys: {},
+      chatPending: false
     };
   }
 }
